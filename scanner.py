@@ -4,7 +4,6 @@ import aiohttp
 import aiofiles
 import hashlib
 import gzip
-import sqlite3
 import yaml
 import tldextract
 import re
@@ -12,6 +11,9 @@ from datetime import datetime
 from urllib.parse import urljoin, urlparse
 from dotenv import load_dotenv
 import logging
+from sqlalchemy import create_engine, Column, String, DateTime, Boolean, Text, Integer
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
 
 # -----------------------------
 # Setup logging
@@ -24,7 +26,11 @@ logger = logging.getLogger(__name__)
 # -----------------------------
 load_dotenv()
 
-DB_PATH = os.getenv("DB_PATH", "storage/db.sqlite")
+DB_HOST = os.getenv("DB_HOST", "localhost")
+DB_PORT = os.getenv("DB_PORT", "5432")
+DB_NAME = os.getenv("DB_NAME", "js_scanner")
+DB_USER = os.getenv("DB_USER", "")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 BLOBS_DIR = os.getenv("BLOBS_DIR", "storage/blobs")
 
 with open("config.yaml", "r") as f:
@@ -34,101 +40,110 @@ with open("rules.yaml", "r") as f:
     RULES_CONFIG = yaml.safe_load(f)
 
 # -----------------------------
-# DB Init (SQLite for now)
+# Database connection setup
+# -----------------------------
+def get_database_url():
+    return f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+
+# Database setup
+engine = create_engine(get_database_url())
+Session = sessionmaker(bind=engine)
+Base = declarative_base()
+
+# -----------------------------
+# Database Models
+# -----------------------------
+class Asset(Base):
+    __tablename__ = 'assets'
+    domain = Column(String, primary_key=True)
+    js_url = Column(String, primary_key=True)
+    latest_sha1 = Column(String)
+    latest_etag = Column(String)
+    latest_last_modified = Column(String)
+    is_vendor = Column(Boolean)
+    last_seen_at = Column(DateTime)
+
+class Finding(Base):
+    __tablename__ = 'findings'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    domain = Column(String)
+    js_url = Column(String)
+    sha1 = Column(String)
+    rule_id = Column(String)
+    excerpt = Column(Text)
+    ts = Column(DateTime)
+
+# -----------------------------
+# DB Init
 # -----------------------------
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-
-    # assets table
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS assets (
-        domain TEXT,
-        js_url TEXT,
-        latest_sha1 TEXT,
-        latest_etag TEXT,
-        latest_last_modified TEXT,
-        is_vendor INTEGER,
-        last_seen_at TEXT,
-        PRIMARY KEY (domain, js_url)
-    )
-    """)
-
-    # findings table
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS findings (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        domain TEXT,
-        js_url TEXT,
-        sha1 TEXT,
-        rule_id TEXT,
-        excerpt TEXT,
-        ts TEXT
-    )
-    """)
-
-    conn.commit()
-    conn.close()
+    Base.metadata.create_all(engine)
 
 # -----------------------------
 # Database helper functions
 # -----------------------------
 def get_asset(domain, js_url):
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM assets WHERE domain = ? AND js_url = ?", (domain, js_url))
-    row = cur.fetchone()
-    conn.close()
-    
-    if row:
-        return {
-            'domain': row[0],
-            'js_url': row[1],
-            'latest_sha1': row[2],
-            'latest_etag': row[3],
-            'latest_last_modified': row[4],
-            'is_vendor': bool(row[5]),
-            'last_seen_at': row[6]
-        }
-    return None
+    session = Session()
+    try:
+        asset = session.query(Asset).filter_by(domain=domain, js_url=js_url).first()
+        if asset:
+            return {
+                'domain': asset.domain,
+                'js_url': asset.js_url,
+                'latest_sha1': asset.latest_sha1,
+                'latest_etag': asset.latest_etag,
+                'latest_last_modified': asset.latest_last_modified,
+                'is_vendor': asset.is_vendor,
+                'last_seen_at': asset.last_seen_at
+            }
+        return None
+    finally:
+        session.close()
 
 def update_asset(domain, js_url, sha1, etag, last_modified, is_vendor):
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    
-    # Check if asset exists
-    asset = get_asset(domain, js_url)
-    current_time = datetime.now().isoformat()
-    
-    if asset:
-        # Update existing asset
-        cur.execute("""
-        UPDATE assets 
-        SET latest_sha1 = ?, latest_etag = ?, latest_last_modified = ?, is_vendor = ?, last_seen_at = ?
-        WHERE domain = ? AND js_url = ?
-        """, (sha1, etag, last_modified, int(is_vendor), current_time, domain, js_url))
-    else:
-        # Insert new asset
-        cur.execute("""
-        INSERT INTO assets (domain, js_url, latest_sha1, latest_etag, latest_last_modified, is_vendor, last_seen_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (domain, js_url, sha1, etag, last_modified, int(is_vendor), current_time))
-    
-    conn.commit()
-    conn.close()
+    session = Session()
+    try:
+        asset = session.query(Asset).filter_by(domain=domain, js_url=js_url).first()
+        current_time = datetime.now()
+        
+        if asset:
+            asset.latest_sha1 = sha1
+            asset.latest_etag = etag
+            asset.latest_last_modified = last_modified
+            asset.is_vendor = is_vendor
+            asset.last_seen_at = current_time
+        else:
+            asset = Asset(
+                domain=domain,
+                js_url=js_url,
+                latest_sha1=sha1,
+                latest_etag=etag,
+                latest_last_modified=last_modified,
+                is_vendor=is_vendor,
+                last_seen_at=current_time
+            )
+            session.add(asset)
+        
+        session.commit()
+    finally:
+        session.close()
 
 def add_finding(domain, js_url, sha1, rule_id, excerpt):
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    current_time = datetime.now().isoformat()
-    
-    cur.execute("""
-    INSERT INTO findings (domain, js_url, sha1, rule_id, excerpt, ts)
-    VALUES (?, ?, ?, ?, ?, ?)
-    """, (domain, js_url, sha1, rule_id, excerpt, current_time))
-    
-    conn.commit()
-    conn.close()
+    session = Session()
+    try:
+        current_time = datetime.now()
+        finding = Finding(
+            domain=domain,
+            js_url=js_url,
+            sha1=sha1,
+            rule_id=rule_id,
+            excerpt=excerpt,
+            ts=current_time
+        )
+        session.add(finding)
+        session.commit()
+    finally:
+        session.close()
 
 # -----------------------------
 # SHA1 Hash helper

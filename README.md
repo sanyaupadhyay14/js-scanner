@@ -2,7 +2,7 @@
 
 A lightweight service that scans homepage JavaScript files for domains, skips vendor libraries, computes SHA-1 hashes of custom JS files, and detects potential secrets using regex patterns. Includes intelligent diff logic to avoid re-processing unchanged files.
 
-## ✨ Features
+##  Features
 
 - **Domain Scanning**: Processes domains from a text file (one per line)
 - **JS Extraction**: Automatically extracts JavaScript URLs from homepage HTML
@@ -12,7 +12,7 @@ A lightweight service that scans homepage JavaScript files for domains, skips ve
 - **Data Storage**: SQLite database for metadata + gzipped blob storage for custom JS files
 - **Scheduling**: Configurable scan intervals (default: every 6 hours)
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -24,3 +24,21 @@ A lightweight service that scans homepage JavaScript files for domains, skips ve
 1. **Clone or download the project**
    ```bash
    cd js-scan
+
+## Database (PostgreSQL)
+
+This project uses PostgreSQL for production-ready data storage:
+
+### Setup PostgreSQL:
+```bash
+# Install PostgreSQL
+brew install postgresql
+
+# Start PostgreSQL service
+brew services start postgresql
+
+# Create database
+createdb js_scanner
+
+# Install dependencies
+pip install -r requirements.txt

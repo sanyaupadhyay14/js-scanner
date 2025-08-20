@@ -1,0 +1,17 @@
+# JS Scanner - Scheduled Execution Examples
+# Add any of these lines to your crontab (crontab -e)
+
+# Run every 6 hours (at the top of the hour)
+0 */6 * * * cd /Users/sanyakumari/Desktop/js-scan && ./scripts/run_once.sh >> /Users/sanyakumari/Desktop/js-scan/scan.log 2>&1
+
+# Run every 3 hours
+# 0 */3 * * * cd /Users/sanyakumari/Desktop/js-scan && ./scripts/run_once.sh >> /Users/sanyakumari/Desktop/js-scan/scan.log 2>&1
+
+# Run daily at 2:30 AM
+# 30 2 * * * cd /Users/sanyakumari/Desktop/js-scan && ./scripts/run_once.sh >> /Users/sanyakumari/Desktop/js-scan/scan.log 2>&1
+
+# Run every Sunday at midnight
+# 0 0 * * 0 cd /Users/sanyakumari/Desktop/js-scan && ./scripts/run_once.sh >> /Users/sanyakumari/Desktop/js-scan/scan.log 2>&1
+
+# Debug mode with timestamp
+# 0 */6 * * * cd /Users/sanyakumari/Desktop/js-scan && ./scripts/run_once.sh >> /Users/sanyakumari/Desktop/js-scan/scan.log 2>&1 && date >> /Users/sanyakumari/Desktop/js-scan/debug.log

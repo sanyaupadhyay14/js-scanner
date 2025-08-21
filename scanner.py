@@ -15,21 +15,20 @@ from sqlalchemy import create_engine, Column, String, DateTime, Boolean, Text, I
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-# -----------------------------
 # Setup logging
-# -----------------------------
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# -----------------------------
+
 # Load ENV + CONFIG + RULES
-# -----------------------------
+
 load_dotenv()
 
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = os.getenv("DB_PORT", "5432")
-DB_NAME = os.getenv("DB_NAME", "js_scanner")
-DB_USER = os.getenv("DB_USER", "")
+DB_NAME = os.getenv("DB_NAME", "scannerdb")
+DB_USER = os.getenv("DB_USER", "sanyakumari")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 BLOBS_DIR = os.getenv("BLOBS_DIR", "storage/blobs")
 
@@ -39,20 +38,22 @@ with open("config.yaml", "r") as f:
 with open("rules.yaml", "r") as f:
     RULES_CONFIG = yaml.safe_load(f)
 
-# -----------------------------
+
 # Database connection setup
-# -----------------------------
+
 def get_database_url():
     return f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
+
 # Database setup
+print(get_database_url())
 engine = create_engine(get_database_url())
 Session = sessionmaker(bind=engine)
 Base = declarative_base()
 
-# -----------------------------
+
 # Database Models
-# -----------------------------
+
 class Asset(Base):
     __tablename__ = 'assets'
     domain = Column(String, primary_key=True)
@@ -73,15 +74,15 @@ class Finding(Base):
     excerpt = Column(Text)
     ts = Column(DateTime)
 
-# -----------------------------
+
 # DB Init
-# -----------------------------
+
 def init_db():
     Base.metadata.create_all(engine)
 
-# -----------------------------
+
 # Database helper functions
-# -----------------------------
+
 def get_asset(domain, js_url):
     session = Session()
     try:
@@ -145,15 +146,15 @@ def add_finding(domain, js_url, sha1, rule_id, excerpt):
     finally:
         session.close()
 
-# -----------------------------
+
 # SHA1 Hash helper
-# -----------------------------
+
 def sha1_bytes(content: bytes) -> str:
     return hashlib.sha1(content).hexdigest()
 
-# -----------------------------
+
 # Secret masking helper
-# -----------------------------
+
 def mask_secret(secret, mask_percent=70):
     """Mask a percentage of the secret string"""
     if not secret:
@@ -161,9 +162,9 @@ def mask_secret(secret, mask_percent=70):
     mask_chars = int(len(secret) * mask_percent / 100)
     return secret[:len(secret)-mask_chars] + '*' * mask_chars
 
-# -----------------------------
+
 # Save blob (gzip)
-# -----------------------------
+
 async def save_blob(content: bytes, sha1: str):
     path = os.path.join(BLOBS_DIR, sha1[:2])
     os.makedirs(path, exist_ok=True)
@@ -175,9 +176,9 @@ async def save_blob(content: bytes, sha1: str):
     
     return file_path
 
-# -----------------------------
+
 # Vendor heuristic
-# -----------------------------
+
 def is_vendor_js(domain: str, js_url: str) -> bool:
     try:
         js_domain = tldextract.extract(urlparse(js_url).netloc).registered_domain
@@ -205,9 +206,9 @@ def is_vendor_js(domain: str, js_url: str) -> bool:
     
     return False
 
-# -----------------------------
+
 # Extract JS URLs from HTML
-# -----------------------------
+
 async def extract_js_urls(session, domain):
     """Extract JS URLs from a domain's homepage"""
     url = f"https://{domain}" if not domain.startswith(('http://', 'https://')) else domain
@@ -231,9 +232,9 @@ async def extract_js_urls(session, domain):
     
     return []
 
-# -----------------------------
+
 # Fetch JS with conditional requests
-# -----------------------------
+
 async def fetch_js(session, url, etag=None, last_modified=None):
     headers = {'User-Agent': CONFIG['user_agent']}
     if etag:
@@ -256,9 +257,9 @@ async def fetch_js(session, url, etag=None, last_modified=None):
         logger.error(f"Error fetching {url}: {e}")
         return None, None, False
 
-# -----------------------------
+
 # Scan content for secrets
-# -----------------------------
+
 def scan_for_secrets(content, domain, js_url, sha1):
     """Scan content for secrets using regex patterns"""
     findings = []
@@ -287,6 +288,7 @@ def scan_for_secrets(content, domain, js_url, sha1):
                             'excerpt': masked_excerpt[:100] + '...' if len(masked_excerpt) > 100 else masked_excerpt
                         })
                         
+
             except Exception as e:
                 logger.error(f"Error with rule {rule.get('id', 'unknown')}: {e}")
                 
@@ -295,9 +297,9 @@ def scan_for_secrets(content, domain, js_url, sha1):
     
     return findings
 
-# -----------------------------
+
 # Process a single JS file
-# -----------------------------
+
 async def process_js_file(session, domain, js_url):
     """Process a single JS file with diff logic"""
     logger.info(f"Processing JS: {js_url}")
@@ -359,9 +361,9 @@ async def process_js_file(session, domain, js_url):
     
     return sha1, False  # changed or new
 
-# -----------------------------
+
 # Main scanner for a domain
-# -----------------------------
+
 async def scan_domain(session, domain):
     """Scan a single domain"""
     logger.info(f"Scanning domain: {domain}")
@@ -396,9 +398,9 @@ async def scan_domain(session, domain):
     except Exception as e:
         logger.error(f"Error scanning domain {domain}: {e}")
 
-# -----------------------------
+
 # Main function
-# -----------------------------
+
 async def main(domains_file, once=False):
     """Main function"""
     init_db()

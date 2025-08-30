@@ -21,6 +21,8 @@ class Asset(Base):
     latest_last_modified = Column(String)
     is_vendor = Column(Boolean)
     last_seen_at = Column(DateTime)
+    change_status = Column(String, default='new')
+    
 
 
 class Finding(Base):
@@ -56,14 +58,15 @@ class DatabaseManager:
                     'latest_etag': asset.latest_etag,
                     'latest_last_modified': asset.latest_last_modified,
                     'is_vendor': asset.is_vendor,
-                    'last_seen_at': asset.last_seen_at
+                    'last_seen_at': asset.last_seen_at,
+                    'change_status': asset.change_status
                 }
             return None
         finally:
             session.close()
     
     @staticmethod
-    def update_asset(domain, js_url, sha1, etag, last_modified, is_vendor):
+    def update_asset(domain, js_url, sha1, etag, last_modified, is_vendor,change_status='changed'):
         """Update or create asset in database."""
         session = Session()
         try:
@@ -76,6 +79,7 @@ class DatabaseManager:
                 asset.latest_last_modified = last_modified
                 asset.is_vendor = is_vendor
                 asset.last_seen_at = current_time
+                asset.change_status = change_status
             else:
                 asset = Asset(
                     domain=domain,
@@ -84,11 +88,17 @@ class DatabaseManager:
                     latest_etag=etag,
                     latest_last_modified=last_modified,
                     is_vendor=is_vendor,
-                    last_seen_at=current_time
+                    last_seen_at=current_time,
+                    change_status=change_status
                 )
                 session.add(asset)
             
             session.commit()
+            return asset
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Error updating asset {url}: {e}")
+            return None
         finally:
             session.close()
     

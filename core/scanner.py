@@ -33,7 +33,8 @@ class JSScanner:
                           asset['latest_sha1'], 
                           asset['latest_etag'], 
                           asset['latest_last_modified'], 
-                          asset['is_vendor'])
+                          asset['is_vendor'],
+                          change_status='unchanged')
             return asset['latest_sha1'], True  # unchanged
         
         if not content:
@@ -49,17 +50,21 @@ class JSScanner:
             db.update_asset(domain, js_url, sha1, 
                           headers.get('ETag'), 
                           headers.get('Last-Modified'), 
-                          asset['is_vendor'])
+                          asset['is_vendor'],
+                          change_status='unchanged')
             return sha1, True  # unchanged
         
         # Determine if this is a vendor file
         is_vendor = utils.is_vendor_js(domain, js_url)
-        
+        # Set appropriate change status
+        change_status = 'changed' if asset else 'new'
         # Update database
         db.update_asset(domain, js_url, sha1, 
                       headers.get('ETag'), 
                       headers.get('Last-Modified'), 
-                      is_vendor)
+                      is_vendor,
+                      change_status=change_status)
+
         
         # Only process custom files (non-vendor)
         if not is_vendor:

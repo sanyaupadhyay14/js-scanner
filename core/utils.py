@@ -76,8 +76,8 @@ class Utils:
                 if response.status == 200:
                     html = await response.text()
                     
-                    # Simple regex to find JS files
-                    js_pattern = r'<script[^>]+src=["\']([^"\']+\.js)["\']'
+                    # Regex to find ALL script src URLs (not just .js)
+                    js_pattern = r'<script[^>]+src=["\']([^"\']+)["\']'
                     js_urls = re.findall(js_pattern, html, re.IGNORECASE)
                     
                     # Convert relative URLs to absolute
@@ -91,7 +91,7 @@ class Utils:
     
     @staticmethod
     async def fetch_js(session, url, etag=None, last_modified=None):
-        """Fetch JS content with conditional requests."""
+        """Fetch JS content with conditional requests and MIME-type filtering."""
         headers = {'User-Agent': config.user_agent}
         if etag:
             headers['If-None-Match'] = etag
@@ -103,6 +103,14 @@ class Utils:
                 if resp.status == 304:  # Not Modified
                     return None, resp.headers, True
                 elif resp.status == 200:
+                    # MIME-type check (only accept JavaScript)
+                    content_type = resp.headers.get("Content-Type", "").lower()
+                    if "javascript" not in content_type:
+                        # Fallback: still accept if URL ends with .js
+                        if not url.lower().endswith(".js"):
+                            logger.info(f"Skipping non-JS file {url} (Content-Type: {content_type})")
+                            return None, resp.headers, False
+
                     content = await resp.read()
                     return content, resp.headers, False
                 else:

@@ -26,7 +26,6 @@ def show_finding_stats():
         findings = session.query(Finding).count()
         print("🔍 SECRET FINDINGS:")
         print(f"   Findings: {findings}")
-        print("   (0 is good - means no exposed secrets)")
     finally:
         session.close()
 

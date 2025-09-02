@@ -58,7 +58,7 @@ class Config:
     
     @property
     def scan_interval_hours(self):
-        return self.app_config.get("scan_interval_hours", 24)
+        return self.app_config.get("scan_interval_hours", 6)
     
     @property
     def user_agent(self):
